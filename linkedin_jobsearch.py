@@ -1,15 +1,41 @@
-from pprint import pprint
-from turtle import color
+from datetime import date
 from pyfiglet import Figlet
-from termcolor import cprint,colored
+from termcolor import colored
 from bs4 import BeautifulSoup
-import requests, sys,time,os  
+import requests, sys,time,os, sqlite3
 import pandas as pd
 
 
 f = Figlet(font='banner',width=200)
 print(colored(f.renderText('\nLINKEDIN_JOBSEARCH'),'magenta'))
 print(colored('\t\t\t\tAuthor: rookyere @(www.linkedin.com/in/rookyere-cybersecurity, https://github.com/rookyere)', 'yellow'))
+
+
+class CreateDb:
+    def __init__(self):
+        self.dbconnect = sqlite3.connect('jobsearch.db')
+        self.dbcursor = self.dbconnect.cursor()      
+        
+
+    def create_jobs_table(self):
+        try:
+            self.dbcursor.execute('''CREATE TABLE jobs(
+                Role text,
+                Comapany_name text,
+                Location text,
+                Published_date text,
+                Job_details text,
+                Search_date text
+            )''')
+            self.dbconnect.commit()
+        except:
+            pass
+                
+
+    def insert_into_db(self, job_info):
+        self.dbcursor.executemany('INSERT INTO jobs VALUES (?,?,?,?,?,?)', job_info)
+        self.dbconnect.commit()
+    
 
 
 def search_criteria():
@@ -119,6 +145,7 @@ def extract_job_info(html):
         job_info_dict['Location']         = location
         job_info_dict['Published_date']   = published_date
         job_info_dict['Further_info']     = job_link
+        job_info_dict['Search_Date']      = date.today()
         details_url_list.append(job_info_dict)
     
         print(f'''
@@ -128,6 +155,7 @@ def extract_job_info(html):
                 Published date      : {published_date}
                 Further_info        : {job_link}
                 ''')
+        
     
 
 def get_html(url,job_role_to_search):
@@ -139,17 +167,21 @@ def get_html(url,job_role_to_search):
     except (AttributeError,TypeError):
         if len(details_url_list) !=0:
             write_to_excel(job_role_to_search)
-            sys.exit(colored(f'\nTotal jobs found: {len(details_url_list)}\n','green'))
+            print(colored(f'\nTotal jobs found: {len(details_url_list)}\n','green'))
         else:
             sys.exit(colored('\n========== SORRY!!! ==========\nNo results found for search criteria. Please adjust the criteria and try again.\n==============================','blue'))
 
 
 def get_url(url):
-    response = requests.get(url)
-    if not response.ok:
-        if len(details_url_list) == 0:
-            sys.exit(colored('\n========== SORRY!!! ==========\nNo results found for search criteria. Please adjust the criteria and try again.\n==============================','blue'))
-    else: return response.text
+
+    try:
+        response = requests.get(url)
+        if not response.ok:
+            if len(details_url_list) == 0:
+                sys.exit(colored('\n========== SORRY!!! ==========\nNo results found for search criteria. Please adjust the criteria and try again.\n==============================','blue'))
+        else: return response.text
+    except:
+        sys.exit(colored(f'\nError: Unable to establish connection to {requests.get(url).url}','red'))
     
 
 def main():
@@ -192,6 +224,12 @@ details_url_list = []
 
 try:
     main()
+    for item in details_url_list:
+        jobs_info_list.append(tuple(item.values()))
+    db = CreateDb()
+    db.create_jobs_table()
+    db.insert_into_db(jobs_info_list)
+    db.dbconnect.close()
 
 except KeyboardInterrupt:
     sys.exit(colored('\n\nProgram terminated successfully.\n','yellow'))
